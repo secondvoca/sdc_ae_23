@@ -122,7 +122,7 @@ class SDC_AE:
             x = x.view([-1, 28 * 28]).to(device)
 
             # Compute prediction error
-            loss = calc_loss(model, x, F)
+            loss = calc_loss(model, x, F, device=device)
 
             # Backpropagation
             loss.backward()
