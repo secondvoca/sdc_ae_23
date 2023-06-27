@@ -10,6 +10,13 @@ from tqdm import tqdm
 
 from collections import OrderedDict
 
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+import pandas as pd
+import seaborn as sns
+
+import datetime
+
 
 class My_Encoder(nn.Module):
     def __init__(self, dim_encoder_output, activation):
@@ -99,6 +106,15 @@ class SDC_AE:
             return f"cuda:{no}"
         return "cpu"
 
+    def save_current_model(self, name):
+        torch.save(
+            self.model,
+            f'./models/{datetime.datetime.today().strftime("%Y-%m-%d %H:%M:%S")}_{name}.pt',
+        )
+
+    def load_model(self, name):
+        self.model = torch.load(f"./models/{name}.pt")
+
     def run(self, model, dataloader, optimizer, device, calc_loss):
         hist = torch.zeros(len(dataloader))
 
@@ -118,8 +134,11 @@ class SDC_AE:
         return hist
 
     def train(self, calc_loss, epochs=5):
-        device = self.get_cuda_device_or_cpu()
-        print(device)
+        try:
+            device = self.get_cuda_device_or_cpu()
+        except:
+            device = "cpu"
+        print(f"Now, it is working on {device}.")
 
         self.model.to(device)
         self.model.train()
@@ -127,7 +146,80 @@ class SDC_AE:
         hist = torch.zeros(0)
 
         for _ in tqdm(range(epochs)):
-            tmp = self.run(self.model, self.train_dataloader, self.optimizer, device, calc_loss)
+            tmp = self.run(
+                self.model, self.train_dataloader, self.optimizer, device, calc_loss
+            )
             hist = torch.cat([hist, tmp])
 
         return hist
+
+    def show_latent_space(
+        self,
+        title,
+        data_ratio=0.2,
+        figsize=[9, 9],
+        xlim=[-10, 10],
+        ylim=[-10, 10],
+        rect_start=[-3, -3],
+        rect_height=6,
+        rect_width=6,
+        rect_linewidth=2,
+    ):
+        self.model.to("cpu")
+
+        loading_count = int(len(self.train_dataloader) * data_ratio)
+
+        df = pd.DataFrame(columns=["x", "y", "label"])
+
+        with torch.no_grad():
+            idx = 0
+            for x, y in self.train_dataloader:
+                x = x.reshape(
+                    [-1, 784]
+                )  # if the model uses convolution, this line of code needs to be fixed.
+                z = self.model.get_submodule("encoder")(x)
+
+                tmp = pd.DataFrame({"x": z[:, 0], "y": z[:, 1], "label": y})
+                df = pd.concat([df, tmp], ignore_index=True)
+
+                idx += 1
+                if idx > loading_count:
+                    break
+
+        fig, ax = plt.subplots(figsize=figsize)
+        sns.scatterplot(data=df, x="x", y="y", hue="label", palette="deep", ax=ax)
+        ax.set_xlim(*xlim)
+        ax.set_ylim(*ylim)
+
+        rect = patches.Rectangle(
+            rect_start,
+            rect_width,
+            rect_height,
+            linewidth=rect_linewidth,
+            edgecolor="r",
+            facecolor="none",
+        )
+        ax.add_patch(rect)
+
+        plt.title(title)
+        plt.show()
+
+    def plot_generated_images(self, title, xlim=[-3, 3], xsteps=11, ylim=[-3, 3], ysteps=11, figsize=[9, 9]):
+        grid_x, grid_y = torch.meshgrid(torch.linspace(*xlim, xsteps), torch.linspace(*ylim, ysteps), indexing='xy')
+        points = torch.stack([grid_x, grid_y], dim=2)
+
+        w = 28
+        n = len(points)
+        img = torch.zeros((n*w, n*w))
+        for i, r in enumerate(points):
+            with torch.no_grad():
+                tmps = self.model.get_submodule('decoder')(r).view([-1, 1, 28, 28])
+                for j, tmp in enumerate(tmps):
+                    img[(n-1-i)*w:(n-1-i+1)*w, j*w:(j+1)*w] = tmp[0]
+        plt.figure(figsize=figsize)
+        plt.axis('off')
+        plt.title(title)
+        plt.imshow(img)
+
+
+  
