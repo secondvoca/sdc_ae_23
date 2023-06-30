@@ -18,46 +18,13 @@ import seaborn as sns
 import datetime
 
 
-class My_Encoder(nn.Module):
-    def __init__(self, dim_encoder_output, activation):
-        super().__init__()
-        if activation == "tanh":
-            self.activation = torch.tanh
-        self.l0 = nn.Linear(784, 512)
-        self.l1 = nn.Linear(512, 512)
-        self.l2 = nn.Linear(512, dim_encoder_output)
-
-    def forward(self, x):
-        z = self.activation(self.l0(x))
-        z = self.activation(self.l1(z))
-        z = self.l2(z)
-        return z
-
-
-class My_Decoder(nn.Module):
-    def __init__(self, dim_decoder_input, activation):
-        super().__init__()
-        if activation == "tanh":
-            self.activation = torch.tanh
-        self.l0 = nn.Linear(dim_decoder_input, 512)
-        self.l1 = nn.Linear(512, 512)
-        self.l2 = nn.Linear(512, 784)
-
-    def forward(self, x):
-        z = self.activation(self.l0(x))
-        z = self.activation(self.l1(z))
-        z = torch.sigmoid(self.l2(z))
-        return z
-
-
-class SDC_AE:
-    def __init__(self, kind="ae", activation="tanh"):
-        super().__init__()
-        self.kind = kind
-        self.activation = "tanh"
+class Manager:
+    # def __init__(self, kind="ae", activation="tanh"):
+    #     super().__init__()
+    #     self.kind = kind
+    #     self.activation = "tanh"
 
     def prepare_data(self, less_than=10, batch_size=128, shuffle=True):
-        # Download training data from open datasets.
         training_data = datasets.MNIST(
             root="data",
             train=True,
@@ -68,28 +35,48 @@ class SDC_AE:
         training_data.data = training_data.data[training_data.targets < less_than]
         training_data.targets = training_data.targets[training_data.targets < less_than]
 
-        # Create data loaders.
         self.train_dataloader = DataLoader(
             training_data, batch_size=batch_size, shuffle=shuffle
         )
 
-    def prepare_model(self, dim_encoder_output, dim_decoder_input, activation="tanh"):
-        if self.kind == "ae":
-            encoder = My_Encoder(
-                dim_encoder_output=dim_encoder_output, activation=activation
+    # def prepare_model(self, dim_encoder_output, dim_decoder_input, activation="tanh"):
+    #     if self.kind == "ae":
+    #         encoder = My_Encoder(
+    #             dim_encoder_output=dim_encoder_output, activation=activation
+    #         )
+    #         decoder = My_Decoder(
+    #             dim_decoder_input=dim_decoder_input, activation=activation
+    #         )
+    #     elif self.kind == 'ae_wl':
+    #         encoder = My_Encoder(
+    #             dim_encoder_output=dim_encoder_output, activation=activation
+    #         )
+    #         decoder = My_Decoder_With_Classifier(
+    #             dim_decoder_input=dim_decoder_input, activation=activation
+    #         )
+
+    #     self.model = nn.Sequential(
+    #             OrderedDict(
+    #                 [
+    #                     ("encoder", encoder),
+    #                     ("decoder", decoder),
+    #                 ]
+    #             )
+    #         )
+    #     self.optimizer = torch.optim.Adam(self.model.parameters())
+
+    
+    def set_model(self, encoder, decoder):
+        self.model = nn.Sequential(
+            OrderedDict(
+                [
+                    ("encoder", encoder),
+                    ("decoder", decoder),
+                ]
             )
-            decoder = My_Decoder(
-                dim_decoder_input=dim_decoder_input, activation=activation
-            )
-            self.model = nn.Sequential(
-                OrderedDict(
-                    [
-                        ("encoder", encoder),
-                        ("decoder", decoder),
-                    ]
-                )
-            )
+        )
         self.optimizer = torch.optim.Adam(self.model.parameters())
+
 
     def get_cuda_device_or_cpu(self):
         if torch.cuda.is_available():
@@ -120,9 +107,10 @@ class SDC_AE:
 
         for batch, (x, y) in enumerate(dataloader):
             x = x.view([-1, 28 * 28]).to(device)
+            y = y.to(device)
 
             # Compute prediction error
-            loss = calc_loss(model, x, F, device=device)
+            loss = calc_loss(model, x, y, F, device=device)
 
             # Backpropagation
             loss.backward()
@@ -156,6 +144,7 @@ class SDC_AE:
     def show_latent_space(
         self,
         title,
+        encode,
         data_ratio=0.2,
         figsize=[9, 9],
         xlim=[-10, 10],
@@ -166,6 +155,7 @@ class SDC_AE:
         rect_linewidth=2,
     ):
         self.model.to("cpu")
+        self.model.eval()
 
         loading_count = int(len(self.train_dataloader) * data_ratio)
 
@@ -177,9 +167,9 @@ class SDC_AE:
                 x = x.reshape(
                     [-1, 784]
                 )  # if the model uses convolution, this line of code needs to be fixed.
-                z = self.model.get_submodule("encoder")(x)
+                zs = encode(self.model, x, y)
 
-                tmp = pd.DataFrame({"x": z[:, 0], "y": z[:, 1], "label": y})
+                tmp = pd.DataFrame({"x": zs[0][:, 0], "y": zs[0][:, 1], "label": y})
                 df = pd.concat([df, tmp], ignore_index=True)
 
                 idx += 1
@@ -204,22 +194,66 @@ class SDC_AE:
         plt.title(title)
         plt.show()
 
-    def plot_generated_images(self, title, xlim=[-3, 3], xsteps=11, ylim=[-3, 3], ysteps=11, figsize=[9, 9]):
-        grid_x, grid_y = torch.meshgrid(torch.linspace(*xlim, xsteps), torch.linspace(*ylim, ysteps), indexing='xy')
+    def plot_generated_images(
+        self, title, xlim=[-3, 3], xsteps=11, ylim=[-3, 3], ysteps=11, figsize=[9, 9]
+    ):
+        grid_x, grid_y = torch.meshgrid(
+            torch.linspace(*xlim, xsteps), torch.linspace(*ylim, ysteps), indexing="xy"
+        )
         points = torch.stack([grid_x, grid_y], dim=2)
 
         w = 28
         n = len(points)
-        img = torch.zeros((n*w, n*w))
+        img = torch.zeros((n * w, n * w))
         for i, r in enumerate(points):
             with torch.no_grad():
-                tmps = self.model.get_submodule('decoder')(r).view([-1, 1, 28, 28])
+                tmps = self.model.get_submodule("decoder")(r).view([-1, 1, 28, 28])
                 for j, tmp in enumerate(tmps):
-                    img[(n-1-i)*w:(n-1-i+1)*w, j*w:(j+1)*w] = tmp[0]
+                    img[
+                        (n - 1 - i) * w : (n - 1 - i + 1) * w, j * w : (j + 1) * w
+                    ] = tmp[0]
         plt.figure(figsize=figsize)
-        plt.axis('off')
+        plt.axis("off")
         plt.title(title)
         plt.imshow(img)
 
+    def plot_generated_images_for_10_classes(
+        self, title=False, xlim=[-3, 3], xsteps=11, ylim=[-3, 3], ysteps=11, figsize=[20, 8.5]
+    ):
+        grid_x, grid_y = torch.meshgrid(
+            torch.linspace(*xlim, xsteps), torch.linspace(*ylim, ysteps), indexing="xy"
+        )
+        points = torch.stack([grid_x, grid_y], dim=2)
 
-  
+        _, (ax_1, ax_2) = plt.subplots(nrows=2, ncols=5, figsize=figsize)
+    
+        for idx in range(5):
+            w = 28
+            n = len(points)
+            img = torch.zeros((n*w, n*w))
+            for i, r in enumerate(points):
+                p = F.one_hot(torch.tensor([idx]*len(r)), 10)
+                tmps = decoder(r, p).view([-1, 1, 28, 28])
+                for j, tmp in enumerate(tmps):
+                    img[(n-1-i)*w:(n-1-i+1)*w, j*w:(j+1)*w] = tmp[0]
+            ax_1[idx].axis('off')
+            ax_1[idx].imshow(img)
+            if title:
+                ax_1[idx].title.set_text(idx)
+
+        for idx in range(5, 10):
+            w = 28
+            n = len(points)
+            img = torch.zeros((n*w, n*w))
+            for i, r in enumerate(points):
+                p = F.one_hot(torch.tensor([idx]*len(r)), 10)
+                tmps = decoder(r, p).view([-1, 1, 28, 28])
+                for j, tmp in enumerate(tmps):
+                    img[(n-1-i)*w:(n-1-i+1)*w, j*w:(j+1)*w] = tmp[0]
+            ax_2[idx - 5].axis('off')
+            ax_2[idx - 5].imshow(img)
+            if title:
+                ax_2[idx - 5].title.set_text(idx)
+
+        plt.tight_layout()
+        plt.show()
