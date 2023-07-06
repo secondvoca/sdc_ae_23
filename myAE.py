@@ -31,7 +31,7 @@ class Manager:
         training_data.data = training_data.data[training_data.targets < less_than]
         training_data.targets = training_data.targets[training_data.targets < less_than]
 
-        self.training_data = training_data.data / 255.0
+        self.training_data = training_data.data.unsqueeze(dim=1) / 255.0
         self.training_targets = training_data.targets
 
         self.training_data_length = len(training_data.data)
@@ -50,6 +50,14 @@ class Manager:
             )
         )
         self.optimizer = torch.optim.Adam(self.model.parameters())
+
+    def print_the_number_of_parameters(self, trainalbe=True):
+        if trainalbe:
+            count = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+            print(f"There are {count:,d} trainable parameters.")
+        else:
+            count = sum(p.numel() for p in self.model.parameters())
+            print(f"There are {count:,d} parameters.")
 
     def get_cuda_device_or_cpu(self):
         if torch.cuda.is_available():
@@ -79,7 +87,7 @@ class Manager:
         hist = torch.zeros(len(dataloader))
 
         for batch, (x, y) in enumerate(dataloader):
-            x = x.view([-1, 28 * 28]).to(device)
+            x = x.to(device)
             y = y.to(device)
 
             # Compute prediction error
@@ -134,7 +142,7 @@ class Manager:
         data_index_to = int(self.training_data_length * data_ratio)
 
         for batch, (x, y) in enumerate(dataloader):
-            x = x.view([-1, 28 * 28]).to(device)
+            x = x.to(device)
             y = y.to(device)
 
             # Compute prediction error
@@ -154,9 +162,7 @@ class Manager:
                     tmp_y = self.training_targets[:data_index_to].to(device)
                     zs = encode_fn(
                         model,
-                        self.training_data[:data_index_to]
-                        .view([-1, 28 * 28])
-                        .to(device),
+                        self.training_data[:data_index_to].to(device),
                         tmp_y,
                     )
                     z = torch.cat([zs[0], tmp_y.unsqueeze(1)], dim=1).cpu().unsqueeze(0)
@@ -170,7 +176,12 @@ class Manager:
         return hist, record
 
     def train_with_record(
-        self, calc_loss, encode_fn, record_step_ratio=0.1, data_ratio=0.2, epochs=5
+        self,
+        calc_loss,
+        encode_fn,
+        record_step_ratio=0.1,
+        data_ratio=0.2,
+        epochs=5,
     ):
         try:
             device = self.get_cuda_device_or_cpu()
@@ -226,9 +237,6 @@ class Manager:
         with torch.no_grad():
             idx = 0
             for x, y in self.train_dataloader:
-                x = x.reshape(
-                    [-1, 784]
-                )  # if the model uses convolution, this line of code needs to be fixed.
                 zs = encode(self.model, x, y)
 
                 tmp = pd.DataFrame({"x": zs[0][:, 0], "y": zs[0][:, 1], "label": y})
