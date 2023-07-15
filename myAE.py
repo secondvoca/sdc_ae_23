@@ -18,6 +18,40 @@ import seaborn as sns
 
 import datetime
 
+class My_Encoder(nn.Module):
+    def __init__(self, dim_encoder_output, activation='tanh'):
+        super().__init__()
+        if activation == "tanh":
+            self.activation = torch.tanh
+        self.fln = nn.Flatten()
+        self.l0 = nn.Linear(784, 512)
+        self.l1 = nn.Linear(512, 512)
+        self.l2 = nn.Linear(512, dim_encoder_output)
+
+    def forward(self, x):
+        x = self.fln(x)
+        h = self.activation(self.l0(x))
+        h = self.activation(self.l1(h))
+        z = self.l2(h)
+        return z
+
+
+class My_Decoder(nn.Module):
+    def __init__(self, dim_decoder_input, activation='tanh'):
+        super().__init__()
+        if activation == "tanh":
+            self.activation = torch.tanh
+        self.l0 = nn.Linear(dim_decoder_input, 512)
+        self.l1 = nn.Linear(512, 512)
+        self.l2 = nn.Linear(512, 784)
+        self.unfln = nn.Unflatten(1, [1, 28, 28])
+
+    def forward(self, z):
+        x_hat = self.activation(self.l0(z))
+        x_hat = self.activation(self.l1(x_hat))
+        x_hat = torch.sigmoid(self.l2(x_hat))
+        x_hat = self.unfln(x_hat)
+        return x_hat
 
 class Manager:
     def prepare_data(self, less_than=10, batch_size=128, shuffle=True):
@@ -39,6 +73,13 @@ class Manager:
         self.train_dataloader = DataLoader(
             training_data, batch_size=batch_size, shuffle=shuffle
         )
+
+    def set_default_model(self, dim_latent):
+        encoder = My_Encoder(dim_latent)
+        decoder = My_Decoder(dim_latent)
+
+        self.set_model(encoder, decoder)
+
 
     def set_model(self, encoder, decoder):
         self.model = nn.Sequential(
