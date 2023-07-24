@@ -163,6 +163,23 @@ class Manager:
 
         return hist
 
+    def train_on_cpu(self, calc_loss, epochs=5):
+        device = "cpu"
+        print(f"Now, it is working on {device}.")
+
+        self.model.to(device)
+        self.model.train()
+
+        hist = torch.zeros(0)
+
+        for _ in tqdm(range(epochs)):
+            tmp = self.run(
+                self.model, self.train_dataloader, self.optimizer, device, calc_loss
+            )
+            hist = torch.cat([hist, tmp])
+
+        return hist
+
     def run_with_record(
         self,
         model,
