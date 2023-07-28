@@ -2,7 +2,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
-from torch.utils.data import DataLoader
+from torch.utils.data import Dataset, DataLoader
 from torchvision import datasets
 from torchvision.transforms import ToTensor
 
@@ -54,6 +54,15 @@ class My_Decoder(nn.Module):
         return x_hat
 
 class Manager:
+    def __init__(self):
+        self.models = dict()
+
+    def add_model(self, name):
+        self.models[name] = self.model
+    
+    def swap_current_model(self, name):
+        self.model = self.models[name]
+
     def prepare_data(self, less_than=10, batch_size=128, shuffle=True):
         training_data = datasets.MNIST(
             root="data",
@@ -74,9 +83,32 @@ class Manager:
             training_data, batch_size=batch_size, shuffle=shuffle
         )
 
-    def set_default_model(self, dim_latent):
-        encoder = My_Encoder(dim_latent)
-        decoder = My_Decoder(dim_latent)
+    def set_data(self, x, y, batch_size=128, shuffle=True):
+        class TmpDataset(Dataset):
+            def __init__(self, x, y):
+                self.x = x
+                self.y = y
+
+            def __len__(self):
+                return len(self.x)
+
+            def __getitem__(self, idx):
+                return self.x[idx], self.y[idx]
+
+        self.training_data = x
+        self.training_targets = y
+
+        self.training_data_length = len(x)
+
+        self.train_dataloader = DataLoader(
+            TmpDataset(x, y), batch_size=batch_size, shuffle=shuffle
+        )
+
+
+
+    def set_default_model(self, dim_latent_encoder, dim_latent_decoder):
+        encoder = My_Encoder(dim_latent_encoder)
+        decoder = My_Decoder(dim_latent_decoder)
 
         self.set_model(encoder, decoder)
 
@@ -346,7 +378,7 @@ class Manager:
         plt.figure(figsize=figsize)
         plt.axis("off")
         plt.title(title)
-        plt.imshow(img)
+        plt.imshow(img, cmap='gray')
 
     def plot_generated_images_for_10_classes(
         self,
@@ -383,7 +415,7 @@ class Manager:
                             (n - 1 - i) * w : (n - 1 - i + 1) * w, j * w : (j + 1) * w
                         ] = tmp[0]
                 ax_1[idx].axis("off")
-                ax_1[idx].imshow(img)
+                ax_1[idx].imshow(img, cmap='gray')
                 if class_title:
                     ax_1[idx].title.set_text(idx)
 
@@ -399,7 +431,7 @@ class Manager:
                             (n - 1 - i) * w : (n - 1 - i + 1) * w, j * w : (j + 1) * w
                         ] = tmp[0]
                 ax_2[idx - 5].axis("off")
-                ax_2[idx - 5].imshow(img)
+                ax_2[idx - 5].imshow(img, cmap='gray')
                 if class_title:
                     ax_2[idx - 5].title.set_text(idx)
 
