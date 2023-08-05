@@ -18,11 +18,18 @@ import seaborn as sns
 
 import datetime
 
+
 class My_Encoder(nn.Module):
-    def __init__(self, dim_encoder_output, activation='tanh'):
+    def __init__(self, dim_encoder_output, activation="tanh"):
         super().__init__()
+
         if activation == "tanh":
             self.activation = torch.tanh
+        elif activation == "sigmoid":
+            self.activation = torch.sigmoid
+        elif activation == "relu":
+            self.activation = torch.relu
+
         self.fln = nn.Flatten()
         self.l0 = nn.Linear(784, 512)
         self.l1 = nn.Linear(512, 512)
@@ -37,10 +44,16 @@ class My_Encoder(nn.Module):
 
 
 class My_Decoder(nn.Module):
-    def __init__(self, dim_decoder_input, activation='tanh'):
+    def __init__(self, dim_decoder_input, activation="tanh"):
         super().__init__()
+
         if activation == "tanh":
             self.activation = torch.tanh
+        elif activation == "sigmoid":
+            self.activation = torch.sigmoid
+        elif activation == "relu":
+            self.activation = torch.relu
+
         self.l0 = nn.Linear(dim_decoder_input, 512)
         self.l1 = nn.Linear(512, 512)
         self.l2 = nn.Linear(512, 784)
@@ -53,26 +66,28 @@ class My_Decoder(nn.Module):
         x_hat = self.unfln(x_hat)
         return x_hat
 
+
 class Manager:
     def __init__(self):
         self.models = dict()
 
     def add_model(self, name):
         self.models[name] = self.model
-    
+
     def swap_current_model(self, name):
         self.model = self.models[name]
 
-    def prepare_data(self, less_than=10, batch_size=128, shuffle=True):
-        training_data = datasets.MNIST(
-            root="data",
-            train=True,
-            download=True,
-            transform=ToTensor(),
-        )
-
-        training_data.data = training_data.data[training_data.targets < less_than]
-        training_data.targets = training_data.targets[training_data.targets < less_than]
+    def prepare_data(self, less_than=10, batch_size=128, shuffle=True, fashion=False):
+        if fashion:
+            training_data = datasets.FashionMNIST(
+                root="data", train=True, download=True, transform=ToTensor()
+            )
+        else:
+            training_data = datasets.MNIST(
+                root="data", train=True, download=True, transform=ToTensor()
+            )
+            training_data.data = training_data.data[training_data.targets < less_than]
+            training_data.targets = training_data.targets[training_data.targets < less_than]
 
         self.training_data = training_data.data.unsqueeze(dim=1) / 255.0
         self.training_targets = training_data.targets
@@ -104,14 +119,13 @@ class Manager:
             TmpDataset(x, y), batch_size=batch_size, shuffle=shuffle
         )
 
-
-
-    def set_default_model(self, dim_latent_encoder, dim_latent_decoder):
-        encoder = My_Encoder(dim_latent_encoder)
-        decoder = My_Decoder(dim_latent_decoder)
+    def set_default_model(
+        self, dim_latent_encoder, dim_latent_decoder, activation="tanh"
+    ):
+        encoder = My_Encoder(dim_latent_encoder, activation)
+        decoder = My_Decoder(dim_latent_decoder, activation)
 
         self.set_model(encoder, decoder)
-
 
     def set_model(self, encoder, decoder):
         self.model = nn.Sequential(
@@ -378,7 +392,7 @@ class Manager:
         plt.figure(figsize=figsize)
         plt.axis("off")
         plt.title(title)
-        plt.imshow(img, cmap='gray')
+        plt.imshow(img, cmap="gray")
 
     def plot_generated_images_for_10_classes(
         self,
@@ -415,7 +429,7 @@ class Manager:
                             (n - 1 - i) * w : (n - 1 - i + 1) * w, j * w : (j + 1) * w
                         ] = tmp[0]
                 ax_1[idx].axis("off")
-                ax_1[idx].imshow(img, cmap='gray')
+                ax_1[idx].imshow(img, cmap="gray")
                 if class_title:
                     ax_1[idx].title.set_text(idx)
 
@@ -431,7 +445,7 @@ class Manager:
                             (n - 1 - i) * w : (n - 1 - i + 1) * w, j * w : (j + 1) * w
                         ] = tmp[0]
                 ax_2[idx - 5].axis("off")
-                ax_2[idx - 5].imshow(img, cmap='gray')
+                ax_2[idx - 5].imshow(img, cmap="gray")
                 if class_title:
                     ax_2[idx - 5].title.set_text(idx)
 
