@@ -98,6 +98,17 @@ class Manager:
             training_data, batch_size=batch_size, shuffle=shuffle
         )
 
+    def reset_dataloader_removing_outliers(self, calc_loss, removing_portion=1/3):
+        with torch.no_grad():
+            ll = calc_loss(self.model, self.training_data.to(self.device), F)
+
+        length = len(ll)
+        portion_int = int(length * (1 - removing_portion))
+        idxs = ll.argsort()
+        
+        self.set_data(self.training_data[idxs[:portion_int]], self.training_targets[idxs[:portion_int]])
+
+
     def set_data(self, x, y, batch_size=128, shuffle=True):
         class TmpDataset(Dataset):
             def __init__(self, x, y):
@@ -195,6 +206,7 @@ class Manager:
         except:
             device = "cpu"
         print(f"Now, it is working on {device}.")
+        self.device = device
 
         self.model.to(device)
         self.model.train()
@@ -212,6 +224,7 @@ class Manager:
     def train_on_cpu(self, calc_loss, epochs=5):
         device = "cpu"
         print(f"Now, it is working on {device}.")
+        self.device = device
 
         self.model.to(device)
         self.model.train()
